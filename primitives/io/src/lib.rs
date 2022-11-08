@@ -17,7 +17,6 @@
 
 //! I/O host interface for substrate runtime.
 
-#![warn(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(not(feature = "std"), feature(alloc_error_handler))]
 #![cfg_attr(
@@ -1657,6 +1656,69 @@ pub trait Sandbox {
 	}
 }
 
+/// Sandbox but ebpf instead of wasm.
+#[runtime_interface(wasm_only)]
+pub trait Ebpf {
+	/// Executes the given eBPF program. The program is expected to be a valid ELF file. The program
+	/// takes input as a buffer.
+	///
+	/// The eBPF program can communicate with the supervisor through invoking the `ext_syscall`
+	/// syscall.
+	///
+	/// `state_ptr` is a pointer to the state object. The requirement is that the first field of
+	/// the state object is an `u64` with `gas_left`.
+	///
+	/// # Errors
+	///
+	/// In case there is an error related to the execution, it will be reported as
+	/// `Ok(EbpfExecOutcome)`.
+	///
+	/// Traps if the syscall handler cannot be found or state object is not accessible. Otherwise,
+	/// all the outcomes communicated via a status code. See `EbpfExecOutcome`.
+	fn execute(
+		&mut self,
+		program: &[u8],
+		input: &[u8],
+		syscall_handler: u32,
+		state_ptr: u32,
+	) -> u32 {
+		let outcome = self
+			.ebpf()
+			.execute(program, input, syscall_handler, state_ptr)
+			.expect("execution failed");
+		outcome as u32
+	}
+
+	/// If the calling code that is in turn was called by the EBPF program, this function will read
+	/// the memory of that program into the given buffer.
+	///
+	/// # Errors
+	///
+	/// If reading from the eBPF program fails, `false` is returned and the buffer is not modified.
+	/// Otherwise, `true` is returned.
+	///
+	/// Traps, if the supervisor buffer cannot be written to.
+	fn caller_read(&mut self, offset: u64, buf_ptr: u32, buf_len: u32) -> bool {
+		self.ebpf()
+			.caller_read(offset, buf_ptr, buf_len)
+			.expect("reading from ebpf caller failed")
+	}
+
+	/// If the calling code that is in turn was called by the EBPF program, this function will write
+	/// the memory of that program from the given buffer.
+	///
+	/// # Errors
+	///
+	/// If writing into the eBPF program fails, `false` is returned. Otherwise, `true` is returned.
+	///
+	/// Traps, if the supervisor buffer cannot be read from.
+	fn caller_write(&mut self, offset: u64, buf_ptr: u32, buf_len: u32) -> bool {
+		self.ebpf()
+			.caller_write(offset, buf_ptr, buf_len)
+			.expect("writing to ebpf caller failed")
+	}
+}
+
 /// Wasm host functions for managing tasks.
 ///
 /// This should not be used directly. Use `sp_tasks` for running parallel tasks instead.
@@ -1769,6 +1831,7 @@ pub type SubstrateHostFunctions = (
 	offchain_index::HostFunctions,
 	runtime_tasks::HostFunctions,
 	transaction_index::HostFunctions,
+	ebpf::HostFunctions,
 );
 
 #[cfg(test)]

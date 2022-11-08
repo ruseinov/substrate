@@ -305,6 +305,7 @@ pub trait FunctionContext {
 	fn deallocate_memory(&mut self, ptr: Pointer<u8>) -> Result<()>;
 	/// Provides access to the sandbox.
 	fn sandbox(&mut self) -> &mut dyn Sandbox;
+	fn ebpf(&mut self) -> &mut dyn Ebpf;
 
 	/// Registers a panic error message within the executor.
 	///
@@ -382,6 +383,63 @@ pub trait Sandbox {
 	///
 	/// Returns `Some(_)` when the requested global variable could be found.
 	fn get_global_val(&self, instance_idx: u32, name: &str) -> Result<Option<Value>>;
+}
+
+#[repr(u32)]
+pub enum EbpfExecOutcome {
+	Ok = 0,
+	OutOfGas = 1,
+	Trap = 2,
+	InvalidImage = 3,
+}
+
+pub trait Ebpf {
+	/// Executes the given eBPF program. The program is expected to be a valid ELF file. The program
+	/// takes input as a buffer.
+	///
+	/// The eBPF program can communicate with the supervisor through invoking the `ext_syscall`
+	/// syscall.
+	///
+	/// `state_ptr` is a pointer to the state object. The requirement is that the first field of
+	/// the state object is an `u64` with `gas_left`.
+	///
+	/// # Errors
+	///
+	/// In case there is an error related to the execution, it will be reported as
+	/// `Ok(EbpfExecOutcome)`.
+	///
+	/// However, in case there is an unrecoverable error (e.g. it's not possible to find the
+	/// supervisor's syscall handler in the table, or the state pointer is not writable) it will be
+	/// returned as an `Err`.
+	fn execute(
+		&mut self,
+		program: &[u8],
+		input: &[u8],
+		syscall_handler: u32,
+		state_ptr: u32,
+	) -> Result<EbpfExecOutcome>;
+
+	/// If the calling code that is in turn was called by the EBPF program, this function will read
+	/// the memory of that program into the given buffer.
+	///
+	/// # Errors
+	///
+	/// If reading did not succeed, `false` is returned. Otherwise, `true` is returned.
+	///
+	/// `Err` is returned, if writing result into the buffer failed or if the runtime is not invoked
+	/// by an eBPF contract.
+	fn caller_read(&mut self, offset: u64, buf_ptr: u32, buf_len: u32) -> Result<bool>;
+
+	/// If the calling code that is in turn was called by the EBPF program, this function will write
+	/// the memory of that program from the given buffer.
+	///
+	/// # Errors
+	///
+	/// If writing did not succeed, `false` is returned. Otherwise, `true` is returned.
+	///
+	/// `Err` is returned, if reading the buffer failed or if the runtime is not invoked by an eBPF
+	/// contract.
+	fn caller_write(&mut self, offset: u64, buf_ptr: u32, buf_len: u32) -> Result<bool>;
 }
 
 if_wasmtime_is_enabled! {

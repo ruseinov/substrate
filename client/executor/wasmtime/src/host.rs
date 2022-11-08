@@ -25,12 +25,13 @@ use wasmtime::{Caller, Func, Val};
 use codec::{Decode, Encode};
 use sc_allocator::{AllocationStats, FreeingBumpHeapAllocator};
 use sc_executor_common::{
+	ebpf::ExecError,
 	error::Result,
 	sandbox::{self, SupervisorFuncIndex},
 	util::MemoryTransfer,
 };
 use sp_sandbox::env as sandbox_env;
-use sp_wasm_interface::{FunctionContext, MemoryId, Pointer, Sandbox, WordSize};
+use sp_wasm_interface::{EbpfExecOutcome, FunctionContext, MemoryId, Pointer, Sandbox, WordSize};
 
 use crate::{runtime::StoreData, util};
 
@@ -48,6 +49,7 @@ pub struct HostState {
 	sandbox_store: SandboxStore,
 	allocator: FreeingBumpHeapAllocator,
 	panic_message: Option<String>,
+	ebpf_memory_ref: Option<*mut ()>, // TODO: vector
 }
 
 impl HostState {
@@ -59,6 +61,7 @@ impl HostState {
 			)))),
 			allocator,
 			panic_message: None,
+			ebpf_memory_ref: None,
 		}
 	}
 
@@ -71,6 +74,9 @@ impl HostState {
 		self.allocator.stats()
 	}
 }
+
+// TODO:
+unsafe impl Send for HostState {}
 
 /// A `HostContext` implements `FunctionContext` for making host calls from a Wasmtime
 /// runtime. The `HostContext` exists only for the lifetime of the call and borrows state from
@@ -108,6 +114,18 @@ impl<'a> HostContext<'a> {
 			.0
 			.as_mut()
 			.expect("sandbox store is only empty when temporarily borrowed")
+	}
+
+	fn write_u64(&mut self, offset: u32, value: u64) -> Result<()> {
+		let buf = value.to_le_bytes();
+		util::write_memory_from(&mut self.caller, offset.into(), &buf)?;
+		Ok(())
+	}
+
+	fn read_u64(&self, offset: u32) -> Result<u64> {
+		let mut buf = [0u8; 8];
+		util::read_memory_into(&self.caller, offset.into(), &mut buf)?;
+		Ok(u64::from_le_bytes(buf))
 	}
 }
 
@@ -148,8 +166,164 @@ impl<'a> sp_wasm_interface::FunctionContext for HostContext<'a> {
 		self
 	}
 
+	fn ebpf(&mut self) -> &mut dyn sp_wasm_interface::Ebpf {
+		self
+	}
+
 	fn register_panic_error_message(&mut self, message: &str) {
 		self.host_state_mut().panic_message = Some(message.to_owned());
+	}
+}
+
+impl<'a> sp_wasm_interface::Ebpf for HostContext<'a> {
+	fn execute(
+		&mut self,
+		program: &[u8],
+		input: &[u8],
+		syscall_handler: u32,
+		state_ptr: u32,
+	) -> sp_wasm_interface::Result<sp_wasm_interface::EbpfExecOutcome> {
+		// Extract a syscall handler from the instance's table by the specified index.
+		let syscall_handler = {
+			let table = self
+				.caller
+				.data()
+				.table()
+				.ok_or("Runtime doesn't have a table; sandbox is unavailable")?;
+			let table_item = table.get(&mut self.caller, syscall_handler);
+
+			*table_item
+				.ok_or("dispatch_thunk_id is out of bounds")?
+				.funcref()
+				.ok_or("dispatch_thunk_idx should be a funcref")?
+				.ok_or("dispatch_thunk_idx should point to actual func")?
+		};
+
+		let mut gas_left = self.read_u64(state_ptr).map_err(|_| "state ptr is not writable")?;
+
+		let mut input = input.to_vec();
+		let outcome = match sc_executor_common::ebpf::execute(
+			program,
+			&mut input,
+			&mut EbpfSupervisorContext { syscall_handler, host_context: self, state_ptr },
+			&mut gas_left,
+		) {
+			Ok(()) => EbpfExecOutcome::Ok,
+			Err(ExecError::Trap) => EbpfExecOutcome::Trap,
+			Err(ExecError::OutOfGas) => EbpfExecOutcome::OutOfGas,
+			Err(ExecError::InvalidImage) => EbpfExecOutcome::InvalidImage,
+		};
+
+		// dump back the gas left
+		self.write_u64(state_ptr, gas_left).map_err(|_| "state ptr is not writable")?;
+
+		Ok(outcome)
+	}
+
+	fn caller_read(
+		&mut self,
+		offset: u64,
+		buf_ptr: u32,
+		buf_len: u32,
+	) -> sp_wasm_interface::Result<bool> {
+		dbg!(offset, buf_ptr, buf_len);
+		let ebpf_memory_ref = self
+			.caller
+			.data_mut()
+			.host_state_mut()
+			.unwrap()
+			.ebpf_memory_ref
+			.ok_or("no eBPF caller")?;
+		let mut buf = vec![0u8; buf_len as usize];
+		unsafe {
+			let memory_ref = sc_executor_common::ebpf::MemoryRef::recover(ebpf_memory_ref);
+			let success = memory_ref.read(offset, &mut buf).is_ok();
+			if success {
+				util::write_memory_from(&mut self.caller, buf_ptr.into(), &buf).map_err(|_| {
+					"Failed to write memory from the sandboxed instance to the supervisor"
+				})?;
+			}
+			Ok(success)
+		}
+	}
+
+	fn caller_write(
+		&mut self,
+		offset: u64,
+		buf_ptr: u32,
+		buf_len: u32,
+	) -> sp_wasm_interface::Result<bool> {
+		let ebpf_memory_ref = self
+			.caller
+			.data_mut()
+			.host_state_mut()
+			.unwrap()
+			.ebpf_memory_ref
+			.ok_or("no eBPF caller")?;
+
+		dbg!(offset, buf_ptr, buf_len);
+		// read the supervisor memory into a buffer.
+		let buffer = match util::read_memory(&self.caller, buf_ptr.into(), buf_len as usize) {
+			Err(_) => todo!(),
+			Ok(buffer) => buffer,
+		};
+		unsafe {
+			let mut memory_ref = sc_executor_common::ebpf::MemoryRef::recover(ebpf_memory_ref);
+			let success = memory_ref.write(offset, &buffer).is_ok();
+			Ok(success)
+		}
+	}
+}
+
+struct EbpfSupervisorContext<'a, 'b> {
+	syscall_handler: Func,
+	host_context: &'a mut HostContext<'b>,
+	state_ptr: u32,
+}
+
+impl<'a, 'b> sc_executor_common::ebpf::SupervisorContext for EbpfSupervisorContext<'a, 'b> {
+	fn supervisor_call(
+		&mut self,
+		r1: u64,
+		r2: u64,
+		r3: u64,
+		r4: u64,
+		r5: u64,
+		gas_left: &mut u64,
+		memory_ref: sc_executor_common::ebpf::MemoryRef<'_, '_>,
+	) -> std::result::Result<u64, ()> {
+		dbg!("in");
+		self.host_context.caller.data_mut().host_state_mut().unwrap().ebpf_memory_ref =
+			Some(memory_ref.erase());
+
+		// dump gas_left into the supervisor memory.
+		self.host_context.write_u64(self.state_ptr, *gas_left).map_err(|_| ())?;
+
+		let mut rets = [Val::I64(0i64); 1];
+		let result = self.syscall_handler.call(
+			&mut self.host_context.caller,
+			&[
+				Val::I32(self.state_ptr as i32),
+				Val::I64(r1 as i64),
+				Val::I64(r2 as i64),
+				Val::I64(r3 as i64),
+				Val::I64(r4 as i64),
+				Val::I64(r5 as i64),
+			],
+			&mut rets,
+		);
+
+		// reload gas_left from the supervisor memory.
+		*gas_left = self.host_context.read_u64(self.state_ptr).map_err(|_| ())?;
+
+		dbg!("out");
+		self.host_context.caller.data_mut().host_state_mut().unwrap().ebpf_memory_ref = None;
+
+		if let Err(_) = result {
+			return Err(())
+		}
+
+		Ok(rets[0].unwrap_i64() as u64)
 	}
 }
 

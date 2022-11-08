@@ -356,6 +356,11 @@ sp_core::wasm_export_functions! {
 		// Mainly a test that the macro is working when we have a return statement here.
 		return 1234;
 	}
+
+	fn test_ebpf() {
+		let program = include_bytes!("../../../../../guest/target/sbf-solana-solana/release/guest.so");
+		execute_ebpf(program);
+	}
 }
 
 #[cfg(not(feature = "std"))]
@@ -532,4 +537,52 @@ where
 	let result = instance.invoke("call", args, &mut state);
 
 	result.map_err(|_| sp_sandbox::HostError)
+}
+
+#[cfg(not(feature = "std"))]
+fn execute_ebpf(program: &[u8]) {
+	#[repr(C)]
+	struct State {
+		gas: u64,
+		data: *mut (),
+	}
+
+	static mut COUNTER: u64 = 0;
+
+	unsafe extern "C" fn syscall_handler(
+		state: *mut State,
+		arg1: u64,
+		arg2: u64,
+		arg3: u64,
+		arg4: u64,
+		arg5: u64,
+	) -> u64 {
+		match arg1 {
+			1 => {
+				let counter = unsafe { COUNTER };
+				let buf = counter.to_le_bytes();
+				sp_io::ebpf::caller_write(arg2 as u64, buf.as_ptr() as u32, buf.len() as u32);
+				(*state).gas -= 1;
+				0
+			},
+			2 => {
+				let mut buf = [0u8; 8];
+				sp_io::ebpf::caller_read(arg2 as u64, buf.as_mut_ptr() as u32, buf.len() as u32);
+				let counter = u64::from_le_bytes(buf);
+				unsafe { COUNTER = counter };
+				(*state).gas -= 1;
+				0
+			},
+			_ => panic!("unknown syscall: {}", arg1),
+		}
+	}
+	let mut state = State { gas: 100_000_000, data: 0x1337 as *mut () };
+	sp_io::ebpf::execute(
+		program,
+		&[],
+		syscall_handler as usize as u32,
+		&mut state as *mut _ as u32,
+	);
+
+	assert_eq!(unsafe { COUNTER }, 1);
 }

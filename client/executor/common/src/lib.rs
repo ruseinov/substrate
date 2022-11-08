@@ -18,9 +18,9 @@
 
 //! A set of common definitions that are needed for defining execution engines.
 
-#![warn(missing_docs)]
 #![deny(unused_crate_dependencies)]
 
+pub mod ebpf;
 pub mod error;
 pub mod runtime_blob;
 pub mod sandbox;
