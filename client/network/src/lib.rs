@@ -248,7 +248,6 @@ mod behaviour;
 mod discovery;
 mod peer_info;
 mod protocol;
-mod service;
 mod transport;
 
 pub mod config;
@@ -256,6 +255,7 @@ pub mod error;
 pub mod event;
 pub mod network_state;
 pub mod request_responses;
+pub mod service;
 pub mod types;
 pub mod utils;
 

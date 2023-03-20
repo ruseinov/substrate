@@ -34,11 +34,13 @@ use libp2p::PeerId;
 use tokio::sync::{mpsc, oneshot};
 
 use sc_network_common::role::ObservedRole;
+use sc_utils::mpsc::{tracing_unbounded, TracingUnboundedReceiver, TracingUnboundedSender};
 
 use std::{collections::HashMap, fmt::Debug};
 
 /// Inner notification event to deal with `NotificationsSinks` without exposing that
 /// implementation detail to [`NotificationService`] consumers.
+#[derive(Debug)]
 enum InnerNotificationEvent {
 	/// Validate inbound substream.
 	ValidateInboundSubstream {
@@ -105,7 +107,7 @@ pub struct NotificationHandle {
 	tx: mpsc::Sender<NotificationCommand>,
 
 	/// RX channel for receiving events from `Notifications`.
-	rx: mpsc::Receiver<InnerNotificationEvent>,
+	rx: TracingUnboundedReceiver<InnerNotificationEvent>,
 
 	/// Connected peers.
 	peers: HashMap<PeerId, NotificationsSink>,
@@ -115,7 +117,7 @@ impl NotificationHandle {
 	/// Create new [`NotificationHandle`].
 	fn new(
 		tx: mpsc::Sender<NotificationCommand>,
-		rx: mpsc::Receiver<InnerNotificationEvent>,
+		rx: TracingUnboundedReceiver<InnerNotificationEvent>,
 	) -> Self {
 		Self { tx, rx, peers: HashMap::new() }
 	}
@@ -170,7 +172,7 @@ impl NotificationService for NotificationHandle {
 
 	/// Get next event from the `Notifications` event stream.
 	async fn next_event(&mut self) -> Option<NotificationEvent> {
-		match self.rx.recv().await? {
+		match self.rx.next().await? {
 			InnerNotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx } =>
 				Some(NotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx }),
 			InnerNotificationEvent::NotificationStreamOpened {
@@ -199,14 +201,14 @@ impl NotificationService for NotificationHandle {
 /// Channel pair which allows `Notifications` to interact with a protocol.
 #[derive(Debug)]
 pub struct ProtocolHandlePair(
-	mpsc::Sender<InnerNotificationEvent>,
+	TracingUnboundedSender<InnerNotificationEvent>,
 	mpsc::Receiver<NotificationCommand>,
 );
 
 impl ProtocolHandlePair {
 	/// Create new [`ProtocolHandlePair`].
 	fn new(
-		tx: mpsc::Sender<InnerNotificationEvent>,
+		tx: TracingUnboundedSender<InnerNotificationEvent>,
 		rx: mpsc::Receiver<NotificationCommand>,
 	) -> Self {
 		Self(tx, rx)
@@ -226,11 +228,11 @@ impl ProtocolHandlePair {
 #[derive(Debug)]
 pub struct ProtocolHandle {
 	/// TX channel for sending events to protocol.
-	tx: mpsc::Sender<InnerNotificationEvent>,
+	tx: TracingUnboundedSender<InnerNotificationEvent>,
 }
 
 impl ProtocolHandle {
-	fn new(tx: mpsc::Sender<InnerNotificationEvent>) -> Self {
+	fn new(tx: TracingUnboundedSender<InnerNotificationEvent>) -> Self {
 		Self { tx }
 	}
 
@@ -239,7 +241,7 @@ impl ProtocolHandle {
 	///
 	/// Return `oneshot::Receiver` which allows `Notifications` to poll for the validation result
 	/// from protocol.
-	async fn report_incoming_substream(
+	pub fn report_incoming_substream(
 		&self,
 		peer: PeerId,
 		handshake: Vec<u8>,
@@ -247,15 +249,18 @@ impl ProtocolHandle {
 		let (result_tx, rx) = oneshot::channel();
 
 		self.tx
-			.send(InnerNotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx })
-			.await
+			.unbounded_send(InnerNotificationEvent::ValidateInboundSubstream {
+				peer,
+				handshake,
+				result_tx,
+			})
 			.map(|_| rx)
 			.map_err(|_| ())
 	}
 
 	/// Report to the protocol that a substream has been opened and that it can now use the handle
 	/// to send notifications to the remote peer.
-	async fn report_substream_opened(
+	pub fn report_substream_opened(
 		&self,
 		peer: PeerId,
 		role: ObservedRole,
@@ -263,33 +268,30 @@ impl ProtocolHandle {
 		sink: NotificationsSink,
 	) -> Result<(), ()> {
 		self.tx
-			.send(InnerNotificationEvent::NotificationStreamOpened {
+			.unbounded_send(InnerNotificationEvent::NotificationStreamOpened {
 				peer,
 				role,
 				negotiated_fallback,
 				sink,
 			})
-			.await
 			.map_err(|_| ())
 	}
 
 	/// Substream was closed.
-	async fn report_substream_closed(&mut self, peer: PeerId) -> Result<(), ()> {
+	pub fn report_substream_closed(&mut self, peer: PeerId) -> Result<(), ()> {
 		self.tx
-			.send(InnerNotificationEvent::NotificationStreamClosed { peer })
-			.await
+			.unbounded_send(InnerNotificationEvent::NotificationStreamClosed { peer })
 			.map_err(|_| ())
 	}
 
 	/// Notification was received from the substream.
-	async fn report_notification_received(
+	pub fn report_notification_received(
 		&mut self,
 		peer: PeerId,
 		notification: Vec<u8>,
 	) -> Result<(), ()> {
 		self.tx
-			.send(InnerNotificationEvent::NotificationReceived { peer, notification })
-			.await
+			.unbounded_send(InnerNotificationEvent::NotificationReceived { peer, notification })
 			.map_err(|_| ())
 	}
 }
@@ -299,7 +301,7 @@ impl ProtocolHandle {
 /// Handle pair allows `Notifications` and the protocol to communicate with each other directly.
 pub fn notification_service() -> (ProtocolHandlePair, Box<dyn NotificationService>) {
 	let (cmd_tx, cmd_rx) = mpsc::channel(64); // TODO: zzz
-	let (event_tx, event_rx) = mpsc::channel(64); // TODO: zzz
+	let (event_tx, event_rx) = tracing_unbounded("mpsc_transactions_handler", 100_000);
 
 	(ProtocolHandlePair::new(event_tx, cmd_rx), Box::new(NotificationHandle::new(cmd_tx, event_rx)))
 }
