@@ -317,7 +317,7 @@ mod tests {
 		let (mut handle, stream) = proto.split();
 
 		let peer_id = PeerId::random();
-		let rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).await.unwrap();
+		let rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).unwrap();
 
 		if let Some(NotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx }) =
 			notif.next_event().await
@@ -339,10 +339,7 @@ mod tests {
 		let (mut handle, stream) = proto.split();
 
 		let peer_id = PeerId::random();
-		handle
-			.report_substream_opened(peer_id, ObservedRole::Full, None, sink)
-			.await
-			.unwrap();
+		handle.report_substream_opened(peer_id, ObservedRole::Full, None, sink).unwrap();
 
 		if let Some(NotificationEvent::NotificationStreamOpened {
 			peer,
@@ -366,7 +363,7 @@ mod tests {
 		let peer_id = PeerId::random();
 
 		// validate inbound substream
-		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).await.unwrap();
+		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).unwrap();
 
 		if let Some(NotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx }) =
 			notif.next_event().await
@@ -380,10 +377,7 @@ mod tests {
 		assert_eq!(result_rx.await.unwrap(), ValidationResult::Accept);
 
 		// report that a substream has been opened
-		handle
-			.report_substream_opened(peer_id, ObservedRole::Full, None, sink)
-			.await
-			.unwrap();
+		handle.report_substream_opened(peer_id, ObservedRole::Full, None, sink).unwrap();
 
 		if let Some(NotificationEvent::NotificationStreamOpened {
 			peer,
@@ -413,7 +407,7 @@ mod tests {
 		let peer_id = PeerId::random();
 
 		// validate inbound substream
-		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).await.unwrap();
+		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).unwrap();
 
 		if let Some(NotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx }) =
 			notif.next_event().await
@@ -427,10 +421,7 @@ mod tests {
 		assert_eq!(result_rx.await.unwrap(), ValidationResult::Accept);
 
 		// report that a substream has been opened
-		handle
-			.report_substream_opened(peer_id, ObservedRole::Full, None, sink)
-			.await
-			.unwrap();
+		handle.report_substream_opened(peer_id, ObservedRole::Full, None, sink).unwrap();
 
 		if let Some(NotificationEvent::NotificationStreamOpened {
 			peer,
@@ -492,7 +483,7 @@ mod tests {
 		let peer_id = PeerId::random();
 
 		// validate inbound substream
-		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).await.unwrap();
+		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).unwrap();
 
 		if let Some(NotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx }) =
 			notif.next_event().await
@@ -506,10 +497,7 @@ mod tests {
 		assert_eq!(result_rx.await.unwrap(), ValidationResult::Accept);
 
 		// report that a substream has been opened
-		handle
-			.report_substream_opened(peer_id, ObservedRole::Full, None, sink)
-			.await
-			.unwrap();
+		handle.report_substream_opened(peer_id, ObservedRole::Full, None, sink).unwrap();
 
 		if let Some(NotificationEvent::NotificationStreamOpened {
 			peer,
@@ -525,7 +513,7 @@ mod tests {
 		}
 
 		// notification is received
-		handle.report_notification_received(peer_id, vec![1, 3, 3, 8]).await.unwrap();
+		handle.report_notification_received(peer_id, vec![1, 3, 3, 8]).unwrap();
 
 		if let Some(NotificationEvent::NotificationReceived { peer, notification }) =
 			notif.next_event().await
@@ -545,7 +533,7 @@ mod tests {
 		let peer_id = PeerId::random();
 
 		// validate inbound substream
-		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).await.unwrap();
+		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).unwrap();
 
 		if let Some(NotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx }) =
 			notif.next_event().await
@@ -559,10 +547,7 @@ mod tests {
 		assert_eq!(result_rx.await.unwrap(), ValidationResult::Accept);
 
 		// report that a substream has been opened
-		handle
-			.report_substream_opened(peer_id, ObservedRole::Full, None, sink)
-			.await
-			.unwrap();
+		handle.report_substream_opened(peer_id, ObservedRole::Full, None, sink).unwrap();
 
 		if let Some(NotificationEvent::NotificationStreamOpened {
 			peer,
@@ -610,7 +595,7 @@ mod tests {
 		let peer_id = PeerId::random();
 
 		// validate inbound substream
-		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).await.unwrap();
+		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).unwrap();
 
 		if let Some(NotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx }) =
 			notif.next_event().await
@@ -624,10 +609,7 @@ mod tests {
 		assert_eq!(result_rx.await.unwrap(), ValidationResult::Accept);
 
 		// report that a substream has been opened
-		handle
-			.report_substream_opened(peer_id, ObservedRole::Full, None, sink)
-			.await
-			.unwrap();
+		handle.report_substream_opened(peer_id, ObservedRole::Full, None, sink).unwrap();
 
 		if let Some(NotificationEvent::NotificationStreamOpened {
 			peer,
@@ -644,7 +626,7 @@ mod tests {
 
 		// report that a substream has been closed but don't poll `notif` to receive this
 		// information
-		handle.report_substream_closed(peer_id).await.unwrap();
+		handle.report_substream_closed(peer_id).unwrap();
 		drop(sync_rx);
 
 		// as per documentation, error is not reported but the notification is silently dropped
@@ -659,7 +641,7 @@ mod tests {
 		let peer_id = PeerId::random();
 
 		// validate inbound substream
-		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).await.unwrap();
+		let result_rx = handle.report_incoming_substream(peer_id, vec![1, 3, 3, 7]).unwrap();
 
 		if let Some(NotificationEvent::ValidateInboundSubstream { peer, handshake, result_tx }) =
 			notif.next_event().await
@@ -673,10 +655,7 @@ mod tests {
 		assert_eq!(result_rx.await.unwrap(), ValidationResult::Accept);
 
 		// report that a substream has been opened
-		handle
-			.report_substream_opened(peer_id, ObservedRole::Full, None, sink)
-			.await
-			.unwrap();
+		handle.report_substream_opened(peer_id, ObservedRole::Full, None, sink).unwrap();
 
 		if let Some(NotificationEvent::NotificationStreamOpened {
 			peer,
@@ -693,7 +672,7 @@ mod tests {
 
 		// report that a substream has been closed but don't poll `notif` to receive this
 		// information
-		handle.report_substream_closed(peer_id).await.unwrap();
+		handle.report_substream_closed(peer_id).unwrap();
 		drop(async_rx);
 
 		// as per documentation, error is not reported but the notification is silently dropped

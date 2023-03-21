@@ -2154,7 +2154,13 @@ mod tests {
 		}
 	}
 
-	fn development_notifs() -> (Notifications, sc_peerset::PeersetHandle) {
+	fn development_notifs() -> (
+		Notifications,
+		sc_peerset::PeersetHandle,
+		Box<dyn crate::service::traits::NotificationService>,
+	) {
+		let (protocol_handle_pair, notif_service) =
+			crate::protocol::notifications::service::notification_service();
 		let (peerset, peerset_handle) = {
 			let mut sets = Vec::with_capacity(1);
 
@@ -2172,20 +2178,24 @@ mod tests {
 		(
 			Notifications::new(
 				peerset,
-				iter::once(ProtocolConfig {
-					name: "/foo".into(),
-					fallback_names: Vec::new(),
-					handshake: vec![1, 2, 3, 4],
-					max_notification_size: u64::MAX,
-				}),
+				iter::once((
+					ProtocolConfig {
+						name: "/foo".into(),
+						fallback_names: Vec::new(),
+						handshake: vec![1, 2, 3, 4],
+						max_notification_size: u64::MAX,
+					},
+					protocol_handle_pair,
+				)),
 			),
 			peerset_handle,
+			notif_service,
 		)
 	}
 
 	#[test]
 	fn update_handshake() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 
 		let inner = notif.notif_protocols.get_mut(0).unwrap().handshake.read().clone();
 		assert_eq!(inner, vec![1, 2, 3, 4]);
@@ -2200,14 +2210,14 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn update_unknown_handshake() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 
 		notif.set_notif_protocol_handshake(1337.into(), vec![5, 6, 7, 8]);
 	}
 
 	#[test]
 	fn disconnect_backoff_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 
 		let peer = PeerId::random();
 		notif.peers.insert(
@@ -2224,7 +2234,7 @@ mod tests {
 
 	#[test]
 	fn disconnect_pending_request() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 
 		notif.peers.insert(
@@ -2241,7 +2251,7 @@ mod tests {
 
 	#[test]
 	fn disconnect_requested_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 
 		let peer = PeerId::random();
 		notif.peers.insert((peer, 0.into()), PeerState::Requested);
@@ -2252,7 +2262,7 @@ mod tests {
 
 	#[test]
 	fn disconnect_disabled_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		notif.peers.insert(
 			(peer, 0.into()),
@@ -2268,7 +2278,7 @@ mod tests {
 
 	#[test]
 	fn remote_opens_connection_and_substream() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let connected = ConnectedPoint::Listener {
@@ -2318,7 +2328,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn disconnect_remote_substream_before_handled_by_peerset() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let connected = ConnectedPoint::Listener {
@@ -2354,7 +2364,7 @@ mod tests {
 
 	#[test]
 	fn peerset_report_connect_backoff() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -2419,7 +2429,7 @@ mod tests {
 
 	#[test]
 	fn peerset_connect_incoming() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -2453,7 +2463,7 @@ mod tests {
 
 	#[test]
 	fn peerset_disconnect_disable_pending_enable() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -2500,7 +2510,7 @@ mod tests {
 
 	#[test]
 	fn peerset_disconnect_enabled() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -2534,7 +2544,7 @@ mod tests {
 
 	#[test]
 	fn peerset_disconnect_requested() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let set_id = sc_peerset::SetId::from(0);
 
@@ -2549,7 +2559,7 @@ mod tests {
 
 	#[test]
 	fn peerset_disconnect_pending_request() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -2602,7 +2612,7 @@ mod tests {
 
 	#[test]
 	fn peerset_accept_peer_not_alive() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -2649,7 +2659,7 @@ mod tests {
 
 	#[test]
 	fn secondary_connection_peer_state_incoming() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let conn2 = ConnectionId::new(1usize);
@@ -2706,7 +2716,7 @@ mod tests {
 
 	#[test]
 	fn close_connection_for_disabled_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -2740,7 +2750,7 @@ mod tests {
 
 	#[test]
 	fn close_connection_for_incoming_peer_one_connection() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -2785,7 +2795,7 @@ mod tests {
 
 	#[test]
 	fn close_connection_for_incoming_peer_two_connections() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let conn1 = ConnectionId::new(1usize);
@@ -2855,7 +2865,7 @@ mod tests {
 
 	#[test]
 	fn connection_and_substream_open() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -2907,7 +2917,7 @@ mod tests {
 
 	#[test]
 	fn connection_closed_sink_replaced() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn1 = ConnectionId::new(0usize);
 		let conn2 = ConnectionId::new(1usize);
@@ -3005,7 +3015,7 @@ mod tests {
 
 	#[test]
 	fn dial_failure_for_requested_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let set_id = sc_peerset::SetId::from(0);
 
@@ -3028,7 +3038,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn write_notification() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -3077,7 +3087,7 @@ mod tests {
 
 	#[test]
 	fn peerset_report_connect_backoff_expired() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -3125,7 +3135,7 @@ mod tests {
 
 	#[test]
 	fn peerset_report_disconnect_disabled() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let set_id = sc_peerset::SetId::from(0);
 		let conn = ConnectionId::new(0usize);
@@ -3151,7 +3161,7 @@ mod tests {
 
 	#[test]
 	fn peerset_report_disconnect_backoff() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -3197,7 +3207,7 @@ mod tests {
 
 	#[test]
 	fn peer_is_backed_off_if_both_connections_get_closed_while_peer_is_disabled_with_back_off() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn1 = ConnectionId::new(0usize);
@@ -3270,7 +3280,7 @@ mod tests {
 
 	#[test]
 	fn inject_connection_closed_incoming_with_backoff() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let set_id = sc_peerset::SetId::from(0);
 		let conn = ConnectionId::new(0usize);
@@ -3321,7 +3331,7 @@ mod tests {
 
 	#[test]
 	fn two_connections_inactive_connection_gets_closed_peer_state_is_still_incoming() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn1 = ConnectionId::new(0usize);
 		let conn2 = ConnectionId::new(1usize);
@@ -3377,7 +3387,7 @@ mod tests {
 
 	#[test]
 	fn two_connections_active_connection_gets_closed_peer_state_is_disabled() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn1 = ConnectionId::new(0usize);
 		let conn2 = ConnectionId::new(1usize);
@@ -3436,7 +3446,7 @@ mod tests {
 
 	#[test]
 	fn inject_connection_closed_for_active_connection() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn1 = ConnectionId::new(0usize);
 		let conn2 = ConnectionId::new(1usize);
@@ -3506,7 +3516,7 @@ mod tests {
 
 	#[test]
 	fn inject_dial_failure_for_pending_request() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -3569,7 +3579,7 @@ mod tests {
 
 	#[test]
 	fn peerstate_incoming_open_desired_by_remote() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let set_id = sc_peerset::SetId::from(0);
 		let conn1 = ConnectionId::new(0usize);
@@ -3623,7 +3633,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn remove_backoff_peer_after_timeout() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let set_id = sc_peerset::SetId::from(0);
 		let conn = ConnectionId::new(0usize);
@@ -3701,7 +3711,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn reschedule_disabled_pending_enable_when_connection_not_closed() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -3817,7 +3827,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn peerset_report_connect_with_enabled_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -3868,7 +3878,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn peerset_report_connect_with_disabled_pending_enable_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -3910,7 +3920,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn peerset_report_connect_with_requested_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let set_id = sc_peerset::SetId::from(0);
 
@@ -3925,7 +3935,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn peerset_report_connect_with_pending_requested() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -3978,7 +3988,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn peerset_report_disconnect_with_incoming_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let set_id = sc_peerset::SetId::from(0);
 		let conn = ConnectionId::new(0usize);
@@ -4014,7 +4024,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn peerset_report_accept_incoming_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -4055,7 +4065,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn peerset_report_accept_not_incoming_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -4104,7 +4114,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn inject_connection_closed_non_existent_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let endpoint = ConnectedPoint::Listener {
 			local_addr: Multiaddr::empty(),
@@ -4124,7 +4134,7 @@ mod tests {
 
 	#[test]
 	fn disconnect_non_existent_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let set_id = sc_peerset::SetId::from(0);
 
@@ -4136,7 +4146,7 @@ mod tests {
 
 	#[test]
 	fn accept_non_existent_connection() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 
 		notif.peerset_report_accept(0.into());
 
@@ -4146,7 +4156,7 @@ mod tests {
 
 	#[test]
 	fn reject_non_existent_connection() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 
 		notif.peerset_report_reject(0.into());
 
@@ -4156,7 +4166,7 @@ mod tests {
 
 	#[test]
 	fn reject_non_active_connection() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -4194,7 +4204,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn reject_non_existent_peer_but_alive_connection() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -4234,7 +4244,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn inject_non_existent_connection_closed_for_incoming_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -4277,7 +4287,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn inject_non_existent_connection_closed_for_disabled_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -4312,7 +4322,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn inject_non_existent_connection_closed_for_disabled_pending_enable() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -4363,7 +4373,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn inject_connection_closed_for_incoming_peer_state_mismatch() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -4407,7 +4417,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn inject_connection_closed_for_enabled_state_mismatch() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
 		let set_id = sc_peerset::SetId::from(0);
@@ -4454,7 +4464,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn inject_connection_closed_for_backoff_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let set_id = sc_peerset::SetId::from(0);
 		let peer = PeerId::random();
 		let conn = ConnectionId::new(0usize);
@@ -4508,7 +4518,7 @@ mod tests {
 	#[should_panic]
 	#[cfg(debug_assertions)]
 	fn open_result_ok_non_existent_peer() {
-		let (mut notif, _peerset) = development_notifs();
+		let (mut notif, _peerset, _notif_service) = development_notifs();
 		let conn = ConnectionId::new(0usize);
 		let connected = ConnectedPoint::Listener {
 			local_addr: Multiaddr::empty(),
