@@ -759,3 +759,15 @@ pub trait NotificationService: Debug + Send {
 	/// Get next event from the `Notifications` event stream.
 	async fn next_event(&mut self) -> Option<NotificationEvent>;
 }
+
+/// Trait implementing [`NotificationService`] with the addition that it allows the protocol
+/// implementation to obtain multiple handles to the underlying notification event stream.
+///
+/// If there are multiple receiver (an unlikely use-case for `NotificationService` and currently
+/// only used in GRANDPA tests), send a `oneshot::Sender` for each listener and collect
+/// `ValidationResult`s from each before reporting the final validation result to `Notifications`.
+pub trait ClonableNotificationService: NotificationService + Debug + Send {
+	/// Make a copy of the object so it can be shared between protocol components
+	/// who wish to have access to the same underlying notification protocol.
+	fn clone(&mut self) -> Box<dyn ClonableNotificationService>;
+}
