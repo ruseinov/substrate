@@ -56,6 +56,8 @@ pub mod hexdisplay;
 
 pub mod defer;
 pub mod ecdsa;
+#[cfg(feature = "std")]
+pub mod ecies;
 pub mod ed25519;
 pub mod hash;
 #[cfg(feature = "std")]

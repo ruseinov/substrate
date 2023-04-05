@@ -2281,7 +2281,7 @@ dependencies = [
  "log",
  "parity-scale-codec",
  "rand 0.8.5",
- "rand_pcg",
+ "rand_pcg 0.3.1",
  "sc-block-builder",
  "sc-cli",
  "sc-client-api",
@@ -5851,7 +5851,7 @@ dependencies = [
  "parity-scale-codec",
  "pretty_assertions",
  "rand 0.8.5",
- "rand_pcg",
+ "rand_pcg 0.3.1",
  "scale-info",
  "serde",
  "smallvec",
@@ -7703,6 +7703,7 @@ dependencies = [
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "rand_hc",
+ "rand_pcg 0.2.1",
 ]
 
 [[package]]
@@ -7769,6 +7770,15 @@ name = "rand_hc"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
+dependencies = [
+ "rand_core 0.5.1",
+]
+
+[[package]]
+name = "rand_pcg"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
 dependencies = [
  "rand_core 0.5.1",
 ]
@@ -9488,7 +9498,7 @@ dependencies = [
  "libc",
  "log",
  "rand 0.8.5",
- "rand_pcg",
+ "rand_pcg 0.3.1",
  "regex",
  "sc-telemetry",
  "serde",
@@ -10350,17 +10360,21 @@ dependencies = [
 name = "sp-core"
 version = "7.0.0"
 dependencies = [
+ "aes-gcm 0.10.1",
  "array-bytes",
  "bitflags",
  "blake2",
  "bounded-collections",
  "bs58",
  "criterion",
+ "curve25519-dalek 3.2.0",
  "dyn-clonable",
+ "ed25519-dalek",
  "ed25519-zebra",
  "futures",
  "hash-db",
  "hash256-std-hasher",
+ "hkdf",
  "impl-serde",
  "lazy_static",
  "libsecp256k1",
@@ -10369,7 +10383,7 @@ dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.1",
  "primitive-types",
- "rand 0.8.5",
+ "rand 0.7.3",
  "regex",
  "scale-info",
  "schnorrkel",
@@ -10377,6 +10391,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "sha2 0.10.6",
  "sp-core-hashing",
  "sp-core-hashing-proc-macro",
  "sp-debug-derive",
@@ -10389,6 +10404,7 @@ dependencies = [
  "substrate-bip39",
  "thiserror",
  "tiny-bip39",
+ "x25519-dalek 1.1.1",
  "zeroize",
 ]
 
@@ -13176,9 +13192,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.5.7"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c394b5bd0c6f669e7275d9c20aa90ae064cb22e75a1cad54e1b34088034b149f"
+checksum = "2a0956f1ba7c7909bfb66c2e9e4124ab6f6482560f6628b5aaeba39207c9aad9"
 dependencies = [
  "zeroize_derive",
 ]
