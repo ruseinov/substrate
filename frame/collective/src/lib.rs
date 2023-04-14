@@ -341,6 +341,16 @@ pub mod pallet {
 		WrongProposalLength,
 	}
 
+	#[pallet::hooks]
+	impl<T: Config<I>, I: 'static> Hooks<T::BlockNumber> for Pallet<T, I> {
+		#[cfg(feature = "try-runtime")]
+		fn try_state(_n: T::BlockNumber) -> Result<(), &'static str> {
+			assert!(false);
+
+			Ok(())
+		}
+	}
+
 	// Note that councillor operations are assigned to the operational class.
 	#[pallet::call]
 	impl<T: Config<I>, I: 'static> Pallet<T, I> {
