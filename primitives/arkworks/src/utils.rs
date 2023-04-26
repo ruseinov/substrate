@@ -24,7 +24,7 @@ pub(crate) fn multi_miller_loop_generic<Curve: Pairing>(
 	let g2 = <ArkScale<Vec<<Curve as Pairing>::G2Affine>> as Decode>::decode(&mut g2.as_slice())
 		.map_err(|_| ())?;
 
-	let result = <Curve as Pairing>::TargetField::generator();
+	let result = <Curve as Pairing>::TargetField::default();
 
 	let result: ArkScale<<Curve as Pairing>::TargetField> = result.into();
 	Ok(result.encode())
