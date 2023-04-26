@@ -1281,6 +1281,11 @@ pub trait EllipticCurves {
 	fn ed_on_bls12_377_msm(bases: Vec<u8>, scalars: Vec<u8>) -> Result<Vec<u8>, ()> {
 		sp_arkworks::ed_on_bls12_377::msm(bases, scalars)
 	}
+
+	/// Do nothing
+	fn do_nothing() -> Result<Vec<u8>, ()> {
+		Ok(())
+	}
 }
 
 /// Interface that provides functions for hashing with different algorithms.
