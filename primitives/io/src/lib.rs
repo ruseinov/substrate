@@ -1283,7 +1283,7 @@ pub trait EllipticCurves {
 	}
 
 	/// Do nothing
-	fn do_nothing() -> Result<Vec<u8>, ()> {
+	fn do_nothing() -> Result<(), ()> {
 		Ok(())
 	}
 }
