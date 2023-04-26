@@ -53,7 +53,7 @@ pub(crate) fn msm_sw_generic<Curve: SWCurveConfig>(
 	)
 	.map_err(|_| ())?;
 
-	let result = Projective::<Curve>::default();
+	let result = short_weierstrass::Projective::<Curve>::default();
 
 	let result: ArkScaleProjective<short_weierstrass::Projective<Curve>> = result.into();
 	Ok(result.encode())
